@@ -57,18 +57,19 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define CAN_ID1_Pin GPIO_PIN_3
-#define CAN_ID1_GPIO_Port GPIOA
-#define CAN_ID2_Pin GPIO_PIN_4
-#define CAN_ID2_GPIO_Port GPIOA
-#define CAN_ID3_Pin GPIO_PIN_5
-#define CAN_ID3_GPIO_Port GPIOA
-#define CAN_ID4_Pin GPIO_PIN_6
-#define CAN_ID4_GPIO_Port GPIOA
+#define CANID1_Pin GPIO_PIN_3
+#define CANID1_GPIO_Port GPIOA
+#define CANID2_Pin GPIO_PIN_4
+#define CANID2_GPIO_Port GPIOA
+#define CANID3_Pin GPIO_PIN_5
+#define CANID3_GPIO_Port GPIOA
+#define CANID4_Pin GPIO_PIN_6
+#define CANID4_GPIO_Port GPIOA
 #define EMS_signal_Pin GPIO_PIN_4
 #define EMS_signal_GPIO_Port GPIOB
 #define EMS_observe_Pin GPIO_PIN_5
 #define EMS_observe_GPIO_Port GPIOB
+#define EMS_observe_EXTI_IRQn EXTI9_5_IRQn
 #define LED_Pin GPIO_PIN_6
 #define LED_GPIO_Port GPIOB
 

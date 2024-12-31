@@ -20,10 +20,11 @@
 #include "main.h"
 #include "can.h"
 #include "gpio.h"
+#include "utils.h"
+#include <cstdio>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -89,40 +90,75 @@ int main(void)
   MX_GPIO_Init();
   MX_CAN_Init();
   /* USER CODE BEGIN 2 */
-  int read = 0,
-      readid1 = 0,
-      readid2 = 0,
-      readid3 = 0,
-      readid4 = 0;
+
+  // ユージング
+  using namespace utils;
+
+  // 基底
+  const int control_ms = 2;
+  const int debug_ms = 100;
+  uint32_t time = 0;
+  uint32_t time_debug = 0;
+
+  uint16_t board_id = 0;
+  int error = 0;
+
+  // CAN ID
+  if(HAL_GPIO_ReadPin(CANID4_GPIO_Port, CANID4_Pin) == GPIO_PIN_SET) board_id |= 0b0001;
+  if(HAL_GPIO_ReadPin(CANID3_GPIO_Port, CANID3_Pin) == GPIO_PIN_SET) board_id |= 0b0010;
+  if(HAL_GPIO_ReadPin(CANID2_GPIO_Port, CANID2_Pin) == GPIO_PIN_SET) board_id |= 0b0100;
+  printf("BOARD ID : %d\n", board_id);
+
+  CAN_FilterTypeDef filter;
+  uint32_t fId   =  0x000 << 21;        // フィルターID
+  uint32_t fMask = (0x7F0 << 21) | 0x4; // フィルターマスク
+
+  filter.FilterIdHigh         = fId >> 16;             // フィルターIDの上位16ビット
+  filter.FilterIdLow          = fId;                   // フィルターIDの下位16ビット
+  filter.FilterMaskIdHigh     = fMask >> 16;           // フィルターマスクの上位16ビット
+  filter.FilterMaskIdLow      = fMask;                 // フィルターマスクの下位16ビット
+  filter.FilterScale          = CAN_FILTERSCALE_32BIT; // 32モード
+  filter.FilterFIFOAssignment = CAN_FILTER_FIFO0;      // FIFO0へ格納
+  filter.FilterBank           = 0;
+  filter.FilterMode           = CAN_FILTERMODE_IDMASK; // IDマスクモード
+  filter.SlaveStartFilterBank = 14;
+  filter.FilterActivation     = ENABLE;
+
+  HAL_CAN_ConfigFilter(&hcan, &filter);
+
+  HAL_CAN_Start(&hcan);
+  HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING);
+
+
+  // 最初に緊急停止ONのCANを送る
+  CAN_TxHeaderTypeDef header;
+  uint32_t mailbox;
+  uint8_t data[8];
+  data[0] = 0x1;
+  if(0 < HAL_CAN_GetTxMailboxesFreeLevel(&hcan)){
+      header.StdId = 0x00F;
+      header.RTR = CAN_RTR_DATA;
+      header.IDE = CAN_ID_STD;
+      header.DLC = 1;
+      header.TransmitGlobalTime = DISABLE;
+      HAL_CAN_AddTxMessage(&hcan, &header, data, &mailbox);
+  }
+
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  read = HAL_GPIO_ReadPin(EMS_observe_GPIO_Port, EMS_observe_Pin);
-	  printf("read EMS_MODE:%d\n\r",read);
-	  HAL_GPIO_WritePin(EMS_signal_GPIO_Port, EMS_signal_Pin, GPIO_PIN_SET);
-	  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
+    if(HAL_GetTick() - time > control_ms){
+        time = HAL_GetTick();
 
-	  readid1 = HAL_GPIO_ReadPin(CAN_ID1_GPIO_Port, CAN_ID1_Pin);
-	  readid2 = HAL_GPIO_ReadPin(CAN_ID2_GPIO_Port, CAN_ID2_Pin);
-	  readid3 = HAL_GPIO_ReadPin(CAN_ID3_GPIO_Port, CAN_ID3_Pin);
-	  readid4 = HAL_GPIO_ReadPin(CAN_ID4_GPIO_Port, CAN_ID4_Pin);
-	  printf("CANID:%d%d%d%d\n\r",readid1, readid2, readid3, readid4);
-	  HAL_Delay(1000);
-
-	  read = HAL_GPIO_ReadPin(EMS_observe_GPIO_Port, EMS_observe_Pin);
-	  printf("read EMS_MODE:%d\n\r",read);
-	  HAL_GPIO_WritePin(EMS_signal_GPIO_Port, EMS_signal_Pin, GPIO_PIN_RESET);
-	  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
-
-	  readid1 = HAL_GPIO_ReadPin(CAN_ID1_GPIO_Port, CAN_ID1_Pin);
-	  readid2 = HAL_GPIO_ReadPin(CAN_ID2_GPIO_Port, CAN_ID2_Pin);
-	  readid3 = HAL_GPIO_ReadPin(CAN_ID3_GPIO_Port, CAN_ID3_Pin);
-	  readid4 = HAL_GPIO_ReadPin(CAN_ID4_GPIO_Port, CAN_ID4_Pin);
-	  printf("CANID:%d%d%d%d\n\r",readid1, readid2, readid3, readid4);
-	  HAL_Delay(1000);
+        if(HAL_GetTick() - time_debug > debug_ms){
+            time_debug = HAL_GetTick();
+            HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+        }
+      }
 
     /* USER CODE END WHILE */
 
@@ -171,15 +207,57 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-int _write(int file, char *ptr, int len)
-{
+// printf関数
+extern "C" {
+int _write(int file, char *ptr, int len){
   int DataIdx;
-  for(DataIdx=0; DataIdx<len; DataIdx++)
-  {
+  for(DataIdx=0; DataIdx<len; DataIdx++){
     ITM_SendChar(*ptr++);
   }
   return len;
 }
+}
+
+// GPIO割り込みコールバック
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
+  if(GPIO_Pin == EMS_observe_Pin){
+    CAN_TxHeaderTypeDef header;
+    uint32_t mailbox;
+    uint8_t data[8];
+    if (HAL_GPIO_ReadPin(EMS_observe_GPIO_Port, EMS_observe_Pin)) data[0] = 0x1;
+    else data[0] = 0x0;
+
+    if(0 < HAL_CAN_GetTxMailboxesFreeLevel(&hcan)){
+        header.StdId = 0x00F;
+        header.RTR = CAN_RTR_DATA;
+        header.IDE = CAN_ID_STD;
+        header.DLC = 1;
+        header.TransmitGlobalTime = DISABLE;
+        HAL_CAN_AddTxMessage(&hcan, &header, data, &mailbox);
+    }
+  }
+}
+
+// CANコールバック
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan){
+    CAN_RxHeaderTypeDef RxHeader;
+    uint32_t id;
+    uint32_t dlc;
+    uint8_t rxdata[8];
+    if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, rxdata) == HAL_OK){
+        id = (RxHeader.IDE == CAN_ID_STD)? RxHeader.StdId : RxHeader.ExtId;     // ID
+        dlc = RxHeader.DLC;
+
+        if(id == 0x000){
+            HAL_GPIO_WritePin(EMS_signal_GPIO_Port, EMS_signal_Pin, GPIO_PIN_SET);
+        }
+        else if(id == 0x001){
+            HAL_GPIO_WritePin(EMS_signal_GPIO_Port, EMS_signal_Pin, GPIO_PIN_RESET);
+        }
+//        printf("ID %d\n", id);
+    }
+}
+
 /* USER CODE END 4 */
 
 /**

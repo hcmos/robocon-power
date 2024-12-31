@@ -52,8 +52,8 @@ void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, EMS_signal_Pin|LED_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : CAN_ID1_Pin CAN_ID2_Pin CAN_ID3_Pin CAN_ID4_Pin */
-  GPIO_InitStruct.Pin = CAN_ID1_Pin|CAN_ID2_Pin|CAN_ID3_Pin|CAN_ID4_Pin;
+  /*Configure GPIO pins : CANID1_Pin CANID2_Pin CANID3_Pin CANID4_Pin */
+  GPIO_InitStruct.Pin = CANID1_Pin|CANID2_Pin|CANID3_Pin|CANID4_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
@@ -67,9 +67,13 @@ void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : EMS_observe_Pin */
   GPIO_InitStruct.Pin = EMS_observe_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(EMS_observe_GPIO_Port, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
 }
 
